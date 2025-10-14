@@ -49,6 +49,7 @@ def create_and_push_repo(task: str, files: dict[str, str], email: str):
     })
 
     pages_api = f"https://api.github.com/repos/{user.login}/{repo_name}/pages"
+    print("pages_api:", pages_api)
     payload = {"source": {"branch": "main", "path": "/"}}
 
     try:
