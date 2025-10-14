@@ -138,7 +138,7 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
                 {"role": "user", "content": prompt}
             ]
         },
-        timeout=90
+        timeout=200
     )
 
     if response.status_code != 200:
