@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hello Namit Color Change</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #111;
+    color: white;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #hello-text {
+    font-size: 3rem;
+    font-weight: bold;
+    user-select: none;
+    transition: color 0.5s ease;
+  }
+</style>
+</head>
+<body>
+  <div id="hello-text">hello namit</div>
+
+<script>
+  const text = document.getElementById('hello-text');
+
+  function getRandomColor() {
+    // Generate a bright color for good visibility
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = 70 + Math.floor(Math.random() * 30);
+    const lightness = 50 + Math.floor(Math.random() * 20);
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  }
+
+  function changeColor() {
+    text.style.color = getRandomColor();
+  }
+
+  // Change color every second
+  setInterval(changeColor, 1000);
+
+  // Initial color
+  changeColor();
+</script>
+</body>
+</html>
