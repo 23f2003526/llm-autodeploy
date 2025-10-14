@@ -5,6 +5,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git build-essential && \
     rm -rf /var/lib/apt/lists/*
 
+# Configure a default git identity for commits
+RUN git config --global user.email "huggingface@app" \
+    && git config --global user.name "HF Deployer"
+
+# Set up the application
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
