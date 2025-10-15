@@ -174,6 +174,8 @@ def notify_evaluation(req: TaskRequest, repo, commit_sha: str, max_retries: int 
         "pages_url": pages_url,
     }
 
+    print("⏳ Waiting 60 seconds for GitHub Pages to deploy...")
+    time.sleep(60)
     delay = 1
     for attempt in range(max_retries):
         try:
