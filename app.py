@@ -198,6 +198,16 @@ def round1(req: TaskRequest):
     if "index.html" not in files:
         files["index.html"] = "<!DOCTYPE html><html><body><h1>Hello World</h1></body></html>"
 
+    # ✅ Include all attachments in files dict so they get pushed
+    for root, _, filenames in os.walk(attach_dir):
+        for filename in filenames:
+            path = os.path.join(root, filename)
+            rel_path = os.path.relpath(path, tmp_dir)  # e.g. "attachments/data.csv"
+            with open(path, "r", encoding="utf-8") as f:
+                files[rel_path] = f.read()
+            print(f"📎 Added attachment to push: {rel_path}")
+
+            
     repo = create_or_get_repo(req.task)
     commit_sha = push_files(repo, files, f"Round 1: {req.brief[:60]}")
     enable_pages(repo)
