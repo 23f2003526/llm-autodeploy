@@ -132,7 +132,7 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
             "Content-Type": "application/json",
         },
         json={
-            "model": "openai/gpt-5",
+            "model": "openai/gpt-4.1-mini",
             "messages": [
                 {"role": "system", "content": "You are a helpful web app code generator."},
                 {"role": "user", "content": prompt}
