@@ -207,7 +207,7 @@ def round1(req: TaskRequest):
                 files[rel_path] = f.read()
             print(f"📎 Added attachment to push: {rel_path}")
 
-            
+
     repo = create_or_get_repo(req.task)
     commit_sha = push_files(repo, files, f"Round 1: {req.brief[:60]}")
     enable_pages(repo)
@@ -229,6 +229,17 @@ def round2(req: TaskRequest):
             continue
 
     new_files = generate_app_code(req.brief, req.checks, tmp_dir, req.round, prev_files)
+
+    # ✅ Include attachments in push
+    for root, _, filenames in os.walk(attach_dir):
+        for filename in filenames:
+            path = os.path.join(root, filename)
+            rel_path = os.path.relpath(path, tmp_dir)  # e.g. "attachments/data.csv"
+            with open(path, "r", encoding="utf-8") as f:
+                new_files[rel_path] = f.read()
+            print(f"📎 Added attachment to push: {rel_path}")
+
+            
     commit_sha = push_files(repo, new_files, f"Round 2: {req.brief[:60]}")
 
     return notify_evaluation(req, repo, commit_sha)
