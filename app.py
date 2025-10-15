@@ -1,6 +1,7 @@
 import os
 import shutil
 import base64
+from time import time
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -159,9 +160,10 @@ def enable_pages(repo):
 # EVALUATION NOTIFICATION
 # ---------------------------------------------------------------------
 
-def notify_evaluation(req: TaskRequest, repo, commit_sha: str):
+def notify_evaluation(req: TaskRequest, repo, commit_sha: str, max_retries: int = 5):
     pages_url = f"https://{repo.owner.login}.github.io/{repo.name}/"
     print(pages_url)
+
     payload = {
         "email": req.email,
         "task": req.task,
@@ -172,16 +174,29 @@ def notify_evaluation(req: TaskRequest, repo, commit_sha: str):
         "pages_url": pages_url,
     }
 
-    resp = requests.post(req.evaluation_url, json=payload)
-    if not resp.ok:
-        raise HTTPException(status_code=500, detail=f"Eval error: {resp.text}")
+    delay = 1
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(req.evaluation_url, json=payload, timeout=10)
+            if resp.ok:
+                return {
+                    "email": req.email,
+                    "task": req.task,
+                    "round": req.round,
+                    "nonce": req.nonce,
+                    "repo_url": repo.html_url,
+                    "pages_url": pages_url,
+                    "commit_sha": commit_sha,
+                    "status": resp.status_code,
+                }
+        except requests.RequestException as e:
+            print(f"Attempt {attempt + 1}: Request failed - {e}")
 
-    return {
-        "repo_url": repo.html_url,
-        "pages_url": pages_url,
-        "commit_sha": commit_sha,
-        "status": resp.status_code,
-    }
+        print(f"Attempt {attempt + 1} failed (status: {getattr(resp, 'status_code', 'N/A')}). Retrying in {delay}s...")
+        time.sleep(delay)
+        delay *= 2  # exponential backoff
+
+    raise HTTPException(status_code=500, detail=f"Eval error after {max_retries} retries: {resp.text if 'resp' in locals() else 'no response'}")
 
 
 # ---------------------------------------------------------------------
@@ -239,7 +254,7 @@ def round2(req: TaskRequest):
                 new_files[rel_path] = f.read()
             print(f"📎 Added attachment to push: {rel_path}")
 
-            
+
     commit_sha = push_files(repo, new_files, f"Round 2: {req.brief[:60]}")
 
     return notify_evaluation(req, repo, commit_sha)
