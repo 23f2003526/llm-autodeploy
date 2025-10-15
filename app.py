@@ -161,6 +161,7 @@ def enable_pages(repo):
 
 def notify_evaluation(req: TaskRequest, repo, commit_sha: str):
     pages_url = f"https://{repo.owner.login}.github.io/{repo.name}/"
+    print(pages_url)
     payload = {
         "email": req.email,
         "task": req.task,
