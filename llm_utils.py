@@ -6,47 +6,84 @@ from config import AIPIPE_TOKEN
 AIPIPE_URL = "https://aipipe.org/openrouter/v1/chat/completions"
 
 
-def parse_ai_output(ai_output: str, TMP_DIR: str) -> dict:
+def parse_ai_output(ai_output: str, TMP_DIR: str, brief: str = "", checks=None, round_num=1) -> dict:
     """
-    Parse AI output in ```filename blocks and write files inside TMP_DIR.
-    Returns dict of {filename: content}.
+    Parse AI output into index.html and README.md using the new format.
+    If missing README.md, auto-generate fallback.
     """
-    files = {}
-    text = ai_output.replace('\r\n', '\n')
+    def _strip_code_block(text: str) -> str:
+        """
+        Removes only the outermost ```...``` fences and optional language tag (like html, md, json, etc.)
+        Keeps nested fenced blocks (e.g., ```json inside README.md).
+        """
+        text = text.strip()
+        if not text.startswith("```"):
+            return text
 
-    pattern = re.compile(
-        r'```(?:filename\s+)?([^\n`]+)\n(.*?)(?=```[A-Za-z0-9_.-]*|\Z)',
-        re.DOTALL
-    )
-    matches = pattern.findall(text)
+        # Find first and last code fence (```)
+        matches = list(re.finditer(r"^```.*?$", text, re.MULTILINE))
+        if len(matches) < 2:
+            # not a proper fenced block
+            return text.replace("```", "").strip()
 
-    for filename, content in matches:
-        content = content.strip()
+        start = matches[0].end()
+        end = matches[-1].start()
+        inner = text[start:end].lstrip("\n")
+
+        # Remove language tag from the first line if present
+        first_newline = inner.find("\n")
+        if first_newline != -1:
+            maybe_lang = inner[:first_newline].strip()
+            if re.fullmatch(r"[a-zA-Z0-9#+_\-]+", maybe_lang):
+                inner = inner[first_newline + 1:]
+
+        return inner.strip()
+
+
+    def generate_readme_fallback(brief: str, checks=None, round_num=1):
+        checks_text = "\n".join(checks or [])
+        return f"""# Auto-generated README (Round {round_num})
+
+            **Project brief:** {brief}
+
+            **Checks to meet:**
+            {checks_text}
+
+            ## Setup
+            1. Open `index.html` in a browser.
+            2. No build steps required.
+
+            ## Notes
+            This README was generated as a fallback because the AI output did not include one.
+            """
+
+    text = ai_output.replace('\r\n', '\n').strip()
+    if "---README.md---" in text:
+        code_part, readme_part = text.split("---README.md---", 1)
+        code_part = _strip_code_block(code_part)
+        readme_part = _strip_code_block(readme_part)
+    else:
+        code_part = _strip_code_block(text)
+        readme_part = generate_readme_fallback(brief, checks, round_num)
+
+    files = {
+        "index.html": code_part,
+        "README.md": readme_part
+    }
+
+    for filename, content in files.items():
         file_path = os.path.join(TMP_DIR, filename)
-
-        # Ensure parent directories exist
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-
-        files[filename] = content
         print(f"✅ Created {file_path}")
-
-    # Fallback
-    if not files:
-        file_path = os.path.join(TMP_DIR, 'index.html')
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(text.strip())
-        files['index.html'] = text.strip()
-        print(f"✅ Created fallback {file_path}")
 
     return files
 
 
 def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None) -> dict:
     """
-   Generate (or revise) app code using AIpipe's OpenRouter-compatible API.
+    Generate (or revise) app code using AIpipe's OpenRouter-compatible API.
     - round_num=1 → create from scratch
     - round_num=2 → improve based on previous version and new brief
     """
@@ -61,14 +98,14 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
 
         allowed_exts = (".html", ".css", ".js", ".json", ".py", ".md", ".txt", ".yml", ".yaml")
         other_files = "\n".join(
-            f"### {name}\n{content[:1000]}"  # only take first 1000 chars to stay within limits
+            f"### {name}\n{content[:1000]}"
             for name, content in prev_files.items()
             if (
                 name not in ("README.md", "index.html")
-                and not name.startswith(".")                # skip .git, .env, etc.
-                and not name.lower().startswith("git")       # skip stray git-related files
+                and not name.startswith(".")
+                and not name.lower().startswith("git")
                 and not any(part.startswith(".git") for part in name.split("/"))
-                and os.path.splitext(name)[1].lower() in allowed_exts  # only readable files
+                and os.path.splitext(name)[1].lower() in allowed_exts
             )
         )
 
@@ -86,42 +123,42 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
         Revise and improve this project according to the new brief below.
         Focus on enhancing features, structure, UI, and documentation as needed.
         Ensure backward compatibility where possible.
-        Do not nest triple backticks inside file content. If necessary, escape them or avoid them. Follow this instruction very strictly. 
         """
 
     ## ------- MAIN PROMPT ------
     prompt = f"""
-    ### Round
-    {round_num}
+        You are a professional web developer assistant.
 
-    ### Task
-    Generate a single index.html file which contains internal css and javascript. Do not create separate css and js files. Generate an appropriate README.md file too. Do keep in mind that these will be deployed on Github Pages and should work from there:
-    {brief}
+        ### Round
+        {round_num}
 
-    {prev_context}
+        ### Task
+        {brief}
 
-    Attachments (if any) are available in attachments/ subfolder.
+        {prev_context}
 
-    Checks: {checks}
+        Attachments (if any) are in attachments/ subfolder.
 
-    Return code files with filenames in the following format:
-    ```filename.file-extension
-    <content>
-    ```
+        ### Evaluation checks
+        {checks or []}
 
-    example-
-    ```index.html
-    <content of the files>
-    ```
-
-    The first line after ```filename must always be the actual filename (e.g., README.md, index.html, script.js, LICENSE, main.py, etc.) Adhere to this format very strictly. Seriously, do not deviate.
-    Include at least one HTML file (preferably index.html).
-    DO NOT include LICENSE file.
-    Include a professional README.md explaining the project, usage, and license.
-    Do not include explanations or extra text outside the blocks.
-    Ensure all dependencies are included.
-    Do not nest triple backticks inside file content. If necessary, escape them or avoid them. Follow this instruction very strictly. 
-    """
+        ### Output format rules:
+        1. Produce a complete web app (HTML/JS/CSS inline if needed) satisfying the brief.
+        2. Output must contain **two parts only**:
+        - index.html (main app code)
+        - README.md (starts after a line containing exactly: ---README.md---)
+        3. README.md must include:
+        - Overview
+        - Setup
+        - Usage
+        - If Round 2, describe improvements made from the previous version.
+        - License (MIT License)
+        4. Do not include any commentary or explanations outside the code or README.
+        5. Do not nest triple backticks inside code or README.
+        6. Ensure all dependencies are included.
+        7. Separate the two parts exactly with the line:
+        ---README.md---
+        """
 
     print(prompt)
     # --- API Request ---
@@ -134,7 +171,7 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
         json={
             "model": "openai/gpt-4.1-mini",
             "messages": [
-                {"role": "system", "content": "You are a helpful web app code generator."},
+                {"role": "system", "content": "You are a helpful coding assistant that outputs runnable web apps"},
                 {"role": "user", "content": prompt}
             ]
         },
@@ -150,8 +187,8 @@ def generate_app_code(brief, checks, TMP_DIR: str, round_num=1, prev_files=None)
     print(TMP_DIR)
     print(content)
 
-    # --- Parse and return files dict ---
-    files = parse_ai_output(content, TMP_DIR=TMP_DIR)
+    # --- Parse and return files dict (pass brief, checks, round_num) ---
+    files = parse_ai_output(content, TMP_DIR=TMP_DIR, brief=brief, checks=checks, round_num=round_num)
     print(files)
     print(files.keys())
     return files
